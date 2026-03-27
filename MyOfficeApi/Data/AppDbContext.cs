@@ -10,6 +10,7 @@ public class AppDbContext : DbContext
     }
 
     public DbSet<MyOfficeAcpd> MyOfficeAcpd { get; set; }
+    public DbSet<MyOfficeExecutionLog> MyOfficeExecutionLog { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -23,6 +24,14 @@ public class AppDbContext : DbContext
             entity.Property(e => e.AcpdStop).HasDefaultValue(false);
             entity.Property(e => e.AcpdNowDateTime).HasDefaultValueSql("getdate()");
             entity.Property(e => e.AcpdUpdDateTime).HasDefaultValueSql("getdate()");
+        });
+
+        modelBuilder.Entity<MyOfficeExecutionLog>(entity =>
+        {
+            entity.HasKey(e => e.DeLogAutoId);
+            entity.Property(e => e.DeLogIsCustomDebug).HasDefaultValue(false);
+            entity.Property(e => e.DeLogVerifyNeeded).HasDefaultValue(false);
+            entity.Property(e => e.DeLogExDateTime).HasDefaultValueSql("getdate()");
         });
     }
 }

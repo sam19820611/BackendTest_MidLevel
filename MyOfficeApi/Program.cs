@@ -1,12 +1,16 @@
 using System.Reflection;
 using Microsoft.EntityFrameworkCore;
 using MyOfficeApi.Data;
+using MyOfficeApi.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add DbContext
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+
+// Add Services
+builder.Services.AddScoped<LogService>();
 
 // Add Controllers
 builder.Services.AddControllers();

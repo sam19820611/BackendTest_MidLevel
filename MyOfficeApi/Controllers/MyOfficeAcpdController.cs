@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using MyOfficeApi.Data;
 using MyOfficeApi.DTOs;
 using MyOfficeApi.Models;
+using MyOfficeApi.Services;
 using Swashbuckle.AspNetCore.Annotations;
 
 namespace MyOfficeApi.Controllers;
@@ -13,10 +14,12 @@ namespace MyOfficeApi.Controllers;
 public class MyOfficeAcpdController : ControllerBase
 {
     private readonly AppDbContext _context;
+    private readonly LogService _logService;
 
-    public MyOfficeAcpdController(AppDbContext context)
+    public MyOfficeAcpdController(AppDbContext context, LogService logService)
     {
         _context = context;
+        _logService = logService;
     }
 
     [HttpGet]
@@ -24,8 +27,22 @@ public class MyOfficeAcpdController : ControllerBase
     [SwaggerResponse(200, "成功取得資料", typeof(IEnumerable<MyOfficeAcpdResponseDto>))]
     public async Task<ActionResult<IEnumerable<MyOfficeAcpdResponseDto>>> GetAll()
     {
-        var items = await _context.MyOfficeAcpd.ToListAsync();
-        return Ok(items.Select(MapToResponseDto));
+        try
+        {
+            var items = await _context.MyOfficeAcpd.ToListAsync();
+            var result = items.Select(MapToResponseDto).ToList();
+            
+            await _logService.LogApiActionAsync("MyOfficeAcpd", "GetAll", 
+                requestData: null, 
+                responseData: new { Count = result.Count });
+            
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            await _logService.LogApiActionAsync("MyOfficeAcpd", "GetAll", error: ex.Message);
+            return StatusCode(500, new { message = "伺服器內部錯誤", error = ex.Message });
+        }
     }
 
     [HttpGet("{id}")]
@@ -34,12 +51,31 @@ public class MyOfficeAcpdController : ControllerBase
     [SwaggerResponse(404, "資源不存在")]
     public async Task<ActionResult<MyOfficeAcpdResponseDto>> GetById(string id)
     {
-        var item = await _context.MyOfficeAcpd.FindAsync(id.PadRight(20));
-        if (item == null)
+        try
         {
-            return NotFound(new { message = "資源不存在" });
+            var item = await _context.MyOfficeAcpd.FindAsync(id.PadRight(20));
+            if (item == null)
+            {
+                await _logService.LogApiActionAsync("MyOfficeAcpd", "GetById", 
+                    requestData: new { Id = id }, 
+                    error: "資源不存在");
+                return NotFound(new { message = "資源不存在" });
+            }
+            
+            var result = MapToResponseDto(item);
+            await _logService.LogApiActionAsync("MyOfficeAcpd", "GetById", 
+                requestData: new { Id = id }, 
+                responseData: new { Sid = result.Sid });
+            
+            return Ok(result);
         }
-        return Ok(MapToResponseDto(item));
+        catch (Exception ex)
+        {
+            await _logService.LogApiActionAsync("MyOfficeAcpd", "GetById", 
+                requestData: new { Id = id }, 
+                error: ex.Message);
+            return StatusCode(500, new { message = "伺服器內部錯誤", error = ex.Message });
+        }
     }
 
     [HttpPost]
@@ -49,36 +85,54 @@ public class MyOfficeAcpdController : ControllerBase
     public async Task<ActionResult<MyOfficeAcpdResponseDto>> Create(
         [FromBody, SwaggerRequestBody("新增資料", Required = true)] MyOfficeAcpdCreateDto dto)
     {
-        if (!ModelState.IsValid)
+        try
         {
-            return BadRequest(ModelState);
+            if (!ModelState.IsValid)
+            {
+                await _logService.LogApiActionAsync("MyOfficeAcpd", "Create", 
+                    requestData: dto, 
+                    error: "請求參數有誤");
+                return BadRequest(ModelState);
+            }
+
+            var newSid = await GenerateNewSidAsync();
+
+            var entity = new MyOfficeAcpd
+            {
+                AcpdSid = newSid,
+                AcpdCname = dto.Cname,
+                AcpdEname = dto.Ename,
+                AcpdSname = dto.Sname,
+                AcpdEmail = dto.Email,
+                AcpdStatus = dto.Status ?? 0,
+                AcpdStop = dto.Stop ?? false,
+                AcpdStopMemo = dto.StopMemo,
+                AcpdLoginId = dto.LoginId,
+                AcpdLoginPwd = dto.LoginPwd,
+                AcpdMemo = dto.Memo,
+                AcpdNowDateTime = DateTime.Now,
+                AcpdNowId = dto.NowId,
+                AcpdUpdDateTime = DateTime.Now,
+                AcpdUpdId = dto.NowId
+            };
+
+            _context.MyOfficeAcpd.Add(entity);
+            await _context.SaveChangesAsync();
+
+            var result = MapToResponseDto(entity);
+            await _logService.LogApiActionAsync("MyOfficeAcpd", "Create", 
+                requestData: dto, 
+                responseData: new { Sid = result.Sid });
+
+            return CreatedAtAction(nameof(GetById), new { id = entity.AcpdSid.Trim() }, result);
         }
-
-        var newSid = await GenerateNewSidAsync();
-
-        var entity = new MyOfficeAcpd
+        catch (Exception ex)
         {
-            AcpdSid = newSid,
-            AcpdCname = dto.Cname,
-            AcpdEname = dto.Ename,
-            AcpdSname = dto.Sname,
-            AcpdEmail = dto.Email,
-            AcpdStatus = dto.Status ?? 0,
-            AcpdStop = dto.Stop ?? false,
-            AcpdStopMemo = dto.StopMemo,
-            AcpdLoginId = dto.LoginId,
-            AcpdLoginPwd = dto.LoginPwd,
-            AcpdMemo = dto.Memo,
-            AcpdNowDateTime = DateTime.Now,
-            AcpdNowId = dto.NowId,
-            AcpdUpdDateTime = DateTime.Now,
-            AcpdUpdId = dto.NowId
-        };
-
-        _context.MyOfficeAcpd.Add(entity);
-        await _context.SaveChangesAsync();
-
-        return CreatedAtAction(nameof(GetById), new { id = entity.AcpdSid.Trim() }, MapToResponseDto(entity));
+            await _logService.LogApiActionAsync("MyOfficeAcpd", "Create", 
+                requestData: dto, 
+                error: ex.Message);
+            return StatusCode(500, new { message = "伺服器內部錯誤", error = ex.Message });
+        }
     }
 
     [HttpPut("{id}")]
@@ -90,33 +144,54 @@ public class MyOfficeAcpdController : ControllerBase
         string id,
         [FromBody, SwaggerRequestBody("更新資料", Required = true)] MyOfficeAcpdUpdateDto dto)
     {
-        if (!ModelState.IsValid)
+        try
         {
-            return BadRequest(ModelState);
-        }
+            if (!ModelState.IsValid)
+            {
+                await _logService.LogApiActionAsync("MyOfficeAcpd", "Update", 
+                    requestData: new { Id = id, Data = dto }, 
+                    error: "請求參數有誤");
+                return BadRequest(ModelState);
+            }
 
-        var entity = await _context.MyOfficeAcpd.FindAsync(id.PadRight(20));
-        if (entity == null)
+            var entity = await _context.MyOfficeAcpd.FindAsync(id.PadRight(20));
+            if (entity == null)
+            {
+                await _logService.LogApiActionAsync("MyOfficeAcpd", "Update", 
+                    requestData: new { Id = id, Data = dto }, 
+                    error: "資源不存在");
+                return NotFound(new { message = "資源不存在" });
+            }
+
+            entity.AcpdCname = dto.Cname ?? entity.AcpdCname;
+            entity.AcpdEname = dto.Ename ?? entity.AcpdEname;
+            entity.AcpdSname = dto.Sname ?? entity.AcpdSname;
+            entity.AcpdEmail = dto.Email ?? entity.AcpdEmail;
+            entity.AcpdStatus = dto.Status ?? entity.AcpdStatus;
+            entity.AcpdStop = dto.Stop ?? entity.AcpdStop;
+            entity.AcpdStopMemo = dto.StopMemo ?? entity.AcpdStopMemo;
+            entity.AcpdLoginId = dto.LoginId ?? entity.AcpdLoginId;
+            entity.AcpdLoginPwd = dto.LoginPwd ?? entity.AcpdLoginPwd;
+            entity.AcpdMemo = dto.Memo ?? entity.AcpdMemo;
+            entity.AcpdUpdDateTime = DateTime.Now;
+            entity.AcpdUpdId = dto.UpdId ?? entity.AcpdUpdId;
+
+            await _context.SaveChangesAsync();
+
+            var result = MapToResponseDto(entity);
+            await _logService.LogApiActionAsync("MyOfficeAcpd", "Update", 
+                requestData: new { Id = id, Data = dto }, 
+                responseData: new { Sid = result.Sid });
+
+            return Ok(result);
+        }
+        catch (Exception ex)
         {
-            return NotFound(new { message = "資源不存在" });
+            await _logService.LogApiActionAsync("MyOfficeAcpd", "Update", 
+                requestData: new { Id = id, Data = dto }, 
+                error: ex.Message);
+            return StatusCode(500, new { message = "伺服器內部錯誤", error = ex.Message });
         }
-
-        entity.AcpdCname = dto.Cname ?? entity.AcpdCname;
-        entity.AcpdEname = dto.Ename ?? entity.AcpdEname;
-        entity.AcpdSname = dto.Sname ?? entity.AcpdSname;
-        entity.AcpdEmail = dto.Email ?? entity.AcpdEmail;
-        entity.AcpdStatus = dto.Status ?? entity.AcpdStatus;
-        entity.AcpdStop = dto.Stop ?? entity.AcpdStop;
-        entity.AcpdStopMemo = dto.StopMemo ?? entity.AcpdStopMemo;
-        entity.AcpdLoginId = dto.LoginId ?? entity.AcpdLoginId;
-        entity.AcpdLoginPwd = dto.LoginPwd ?? entity.AcpdLoginPwd;
-        entity.AcpdMemo = dto.Memo ?? entity.AcpdMemo;
-        entity.AcpdUpdDateTime = DateTime.Now;
-        entity.AcpdUpdId = dto.UpdId ?? entity.AcpdUpdId;
-
-        await _context.SaveChangesAsync();
-
-        return Ok(MapToResponseDto(entity));
     }
 
     [HttpDelete("{id}")]
@@ -125,16 +200,33 @@ public class MyOfficeAcpdController : ControllerBase
     [SwaggerResponse(404, "資源不存在")]
     public async Task<IActionResult> Delete(string id)
     {
-        var entity = await _context.MyOfficeAcpd.FindAsync(id.PadRight(20));
-        if (entity == null)
+        try
         {
-            return NotFound(new { message = "資源不存在" });
+            var entity = await _context.MyOfficeAcpd.FindAsync(id.PadRight(20));
+            if (entity == null)
+            {
+                await _logService.LogApiActionAsync("MyOfficeAcpd", "Delete", 
+                    requestData: new { Id = id }, 
+                    error: "資源不存在");
+                return NotFound(new { message = "資源不存在" });
+            }
+
+            _context.MyOfficeAcpd.Remove(entity);
+            await _context.SaveChangesAsync();
+
+            await _logService.LogApiActionAsync("MyOfficeAcpd", "Delete", 
+                requestData: new { Id = id }, 
+                responseData: new { Deleted = true });
+
+            return NoContent();
         }
-
-        _context.MyOfficeAcpd.Remove(entity);
-        await _context.SaveChangesAsync();
-
-        return NoContent();
+        catch (Exception ex)
+        {
+            await _logService.LogApiActionAsync("MyOfficeAcpd", "Delete", 
+                requestData: new { Id = id }, 
+                error: ex.Message);
+            return StatusCode(500, new { message = "伺服器內部錯誤", error = ex.Message });
+        }
     }
 
     private static MyOfficeAcpdResponseDto MapToResponseDto(MyOfficeAcpd entity)
