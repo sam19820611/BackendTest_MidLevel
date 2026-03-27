@@ -34,7 +34,7 @@ public class MyOfficeAcpd
     public bool? AcpdStop { get; set; }
 
     [Column("ACPD_StopMemo")]
-    [StringLength(600)]
+    [StringLength(60)]
     public string? AcpdStopMemo { get; set; }
 
     [Column("ACPD_LoginID")]
@@ -46,7 +46,7 @@ public class MyOfficeAcpd
     public string? AcpdLoginPwd { get; set; }
 
     [Column("ACPD_Memo")]
-    [StringLength(120)]
+    [StringLength(600)]
     public string? AcpdMemo { get; set; }
 
     [Column("ACPD_NowDateTime")]

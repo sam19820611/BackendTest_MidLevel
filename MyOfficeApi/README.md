@@ -109,10 +109,10 @@ MyOfficeApi/
 | ACPD_Email | nvarchar(60) | 電子郵件 |
 | ACPD_Status | tinyint | 狀態 (0=正常, 99=不正常) |
 | ACPD_Stop | bit | 是否停用 |
-| ACPD_StopMemo | nvarchar(600) | 停用原因 |
+| ACPD_StopMemo | nvarchar(60) | 停用原因 |
 | ACPD_LoginID | nvarchar(30) | 登入帳號 |
 | ACPD_LoginPWD | nvarchar(60) | 登入密碼 |
-| ACPD_Memo | nvarchar(120) | 備註 |
+| ACPD_Memo | nvarchar(600) | 備註 |
 | ACPD_NowDateTime | datetime | 新增日期 |
 | ACPD_NowID | nvarchar(20) | 新增人員代碼 |
 | ACPD_UPDDateTime | datetime | 修改日期 |

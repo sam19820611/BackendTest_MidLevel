@@ -41,7 +41,7 @@ public class MyOfficeAcpdCreateDto
 
     /// <summary>停用原因</summary>
     /// <example></example>
-    [StringLength(600)]
+    [StringLength(60)]
     public string? StopMemo { get; set; }
 
     /// <summary>登入帳號</summary>
@@ -56,7 +56,7 @@ public class MyOfficeAcpdCreateDto
 
     /// <summary>備註</summary>
     /// <example>測試用戶</example>
-    [StringLength(120)]
+    [StringLength(600)]
     public string? Memo { get; set; }
 
     /// <summary>新增人員代碼</summary>
@@ -101,7 +101,7 @@ public class MyOfficeAcpdUpdateDto
 
     /// <summary>停用原因</summary>
     /// <example></example>
-    [StringLength(600)]
+    [StringLength(60)]
     public string? StopMemo { get; set; }
 
     /// <summary>登入帳號</summary>
@@ -116,7 +116,7 @@ public class MyOfficeAcpdUpdateDto
 
     /// <summary>備註</summary>
     /// <example>已更新資料</example>
-    [StringLength(120)]
+    [StringLength(600)]
     public string? Memo { get; set; }
 
     /// <summary>更新人員代碼</summary>
