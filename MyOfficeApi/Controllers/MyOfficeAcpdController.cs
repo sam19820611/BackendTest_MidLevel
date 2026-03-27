@@ -54,7 +54,7 @@ public class MyOfficeAcpdController : ControllerBase
             return BadRequest(ModelState);
         }
 
-        var newSid = GenerateNewSid();
+        var newSid = await GenerateNewSidAsync();
 
         var entity = new MyOfficeAcpd
         {
@@ -158,23 +158,40 @@ public class MyOfficeAcpdController : ControllerBase
         };
     }
 
-    private string GenerateNewSid()
+    /// <summary>
+    /// 產生唯一主鍵 (參考 NewSID Stored Procedure)
+    /// 格式: [年份編碼2碼][年中天數3碼][當日秒數5碼][隨機值10碼] = 20碼
+    /// </summary>
+    private async Task<string> GenerateNewSidAsync()
     {
-        var now = DateTime.Now;
-        var currentYear = now.Year - 2000;
-        var dayOfYear = now.DayOfYear;
-        var secondOfDay = now.Second + (60 * now.Minute) + (3600 * now.Hour);
-
         const string alphabets = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-        var firstDigit = alphabets[(currentYear / 36) % 36];
-        var secondDigit = alphabets[currentYear % 36];
-        var prefix = $"{firstDigit}{secondDigit}";
-        var dayCode = dayOfYear.ToString("D3");
-        var secondCode = secondOfDay.ToString("D5");
+        
+        while (true)
+        {
+            var now = DateTime.Now;
+            var currentYear = now.Year - 2000;
+            
+            if (currentYear > 1295)
+                currentYear = 1295;
+            
+            var dayOfYear = now.DayOfYear;
+            var secondOfDay = now.Second + (60 * now.Minute) + (3600 * now.Hour);
 
-        var random = new Random();
-        var randomValue = random.NextInt64(0, 10000000000).ToString("D10");
+            var firstDigit = alphabets[(currentYear / 36) % 36];
+            var secondDigit = alphabets[currentYear % 36];
+            var prefix = $"{firstDigit}{secondDigit}";
+            var dayCode = dayOfYear.ToString("D3");
+            var secondCode = secondOfDay.ToString("D5");
 
-        return (prefix + dayCode + secondCode + randomValue).PadRight(20);
+            var guidBytes = Guid.NewGuid().ToByteArray();
+            var randomNumber = Math.Abs(BitConverter.ToInt64(guidBytes, 0)) % 10000000000;
+            var randomValue = randomNumber.ToString("D10");
+
+            var newSid = (prefix + dayCode + secondCode + randomValue).PadRight(20);
+
+            var exists = await _context.MyOfficeAcpd.AnyAsync(x => x.AcpdSid == newSid);
+            if (!exists)
+                return newSid;
+        }
     }
 }
