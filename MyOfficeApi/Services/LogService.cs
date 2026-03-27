@@ -1,11 +1,13 @@
+using System.Data;
 using System.Text.Json;
+using Microsoft.Data.SqlClient;
+using Microsoft.EntityFrameworkCore;
 using MyOfficeApi.Data;
-using MyOfficeApi.Models;
 
 namespace MyOfficeApi.Services;
 
 /// <summary>
-/// 日誌記錄服務 (參考 usp_AddLog)
+/// 日誌記錄服務 - 呼叫 usp_AddLog Stored Procedure
 /// </summary>
 public class LogService
 {
@@ -17,45 +19,63 @@ public class LogService
     }
 
     /// <summary>
-    /// 新增執行日誌
+    /// 呼叫 usp_AddLog Stored Procedure 新增執行日誌
     /// </summary>
-    /// <param name="spName">預存程序/API 名稱</param>
+    /// <param name="readId">執行 Log 時是使用第幾版 (預設 0)</param>
+    /// <param name="spName">執行的預存程序名稱</param>
     /// <param name="groupId">執行群組代碼</param>
-    /// <param name="program">執行的動作</param>
-    /// <param name="info">執行的內容 (JSON)</param>
-    /// <param name="isDebug">是否為 Debug</param>
-    /// <param name="verifyNeeded">是否需要檢查</param>
-    public async Task AddLogAsync(
+    /// <param name="exProgram">執行的動作是什麼</param>
+    /// <param name="actionJson">執行的過程是什麼 (JSON)</param>
+    /// <returns>回傳執行的項目 (JSON)</returns>
+    public async Task<string?> AddLogAsync(
+        byte readId,
         string spName,
         Guid groupId,
-        string program,
-        object? info = null,
-        bool isDebug = false,
-        bool verifyNeeded = false)
+        string exProgram,
+        string? actionJson = null)
     {
-        var log = new MyOfficeExecutionLog
+        try
         {
-            DeLogStoredPrograms = spName,
-            DeLogGroupId = groupId,
-            DeLogExecutionProgram = program,
-            DeLogExecutionInfo = info != null ? JsonSerializer.Serialize(info, new JsonSerializerOptions 
-            { 
-                WriteIndented = false,
-                Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
-            }) : null,
-            DeLogIsCustomDebug = isDebug,
-            DeLogVerifyNeeded = verifyNeeded,
-            DeLogExDateTime = DateTime.Now
-        };
+            var connection = _context.Database.GetDbConnection();
+            
+            using var command = connection.CreateCommand();
+            command.CommandText = "usp_AddLog";
+            command.CommandType = CommandType.StoredProcedure;
 
-        _context.MyOfficeExecutionLog.Add(log);
-        await _context.SaveChangesAsync();
+            command.Parameters.Add(new SqlParameter("@_InBox_ReadID", SqlDbType.TinyInt) { Value = readId });
+            command.Parameters.Add(new SqlParameter("@_InBox_SPNAME", SqlDbType.NVarChar, 120) { Value = spName });
+            command.Parameters.Add(new SqlParameter("@_InBox_GroupID", SqlDbType.UniqueIdentifier) { Value = groupId });
+            command.Parameters.Add(new SqlParameter("@_InBox_ExProgram", SqlDbType.NVarChar, 40) { Value = exProgram });
+            command.Parameters.Add(new SqlParameter("@_InBox_ActionJSON", SqlDbType.NVarChar, -1) { Value = actionJson ?? (object)DBNull.Value });
+            
+            var outputParam = new SqlParameter("@_OutBox_ReturnValues", SqlDbType.NVarChar, -1)
+            {
+                Direction = ParameterDirection.Output
+            };
+            command.Parameters.Add(outputParam);
+
+            if (connection.State != ConnectionState.Open)
+                await connection.OpenAsync();
+
+            await command.ExecuteNonQueryAsync();
+
+            return outputParam.Value as string;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
     }
 
     /// <summary>
-    /// 記錄 API 操作
+    /// 記錄 API 操作 (簡化方法)
     /// </summary>
-    public async Task LogApiActionAsync(string apiName, string action, object? requestData = null, object? responseData = null, string? error = null)
+    public async Task<string?> LogApiActionAsync(
+        string apiName, 
+        string action, 
+        object? requestData = null, 
+        object? responseData = null, 
+        string? error = null)
     {
         var groupId = Guid.NewGuid();
         var info = new
@@ -66,13 +86,18 @@ public class LogService
             Timestamp = DateTime.Now
         };
 
-        await AddLogAsync(
+        var actionJson = JsonSerializer.Serialize(info, new JsonSerializerOptions
+        {
+            WriteIndented = false,
+            Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+        });
+
+        return await AddLogAsync(
+            readId: 0,
             spName: $"API_{apiName}",
             groupId: groupId,
-            program: action,
-            info: info,
-            isDebug: error != null,
-            verifyNeeded: error != null
+            exProgram: action,
+            actionJson: actionJson
         );
     }
 }
